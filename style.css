@@ -5,3 +5,11 @@
 .clock,.hud-actions{white-space:nowrap}.vitals{flex-shrink:0}.clock{min-width:0}.hud-actions{flex-shrink:0}
 @media(max-width:360px){.hud-top{gap:7px;padding:14px 10px}.vitals{width:96px}.clock strong{font-size:20px;letter-spacing:1px}.clock>span{font-size:8px}.clock small{font-size:8px}.hud-actions{gap:6px;font-size:9px}.hud-actions button{width:28px;height:30px}}
 @media(max-height:520px){.screen{height:100dvh;min-height:0;overflow-y:auto;padding-bottom:8px}header,.intro,.bottom-panel{flex-shrink:0}.intro{margin-top:24px}.bottom-panel{margin-top:28px}.scene-caption{display:none}.dialog{max-height:90dvh}.hud-top{padding-top:10px}.hud-bottom{bottom:10px}}
+
+.view-controls{position:absolute;right:max(14px,env(safe-area-inset-right));bottom:calc(90px + env(safe-area-inset-bottom));text-align:center;pointer-events:auto;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.view-controls>span{display:block;color:#b8c9ac;font-size:10px;letter-spacing:1px;margin-bottom:5px;text-shadow:0 1px 3px #000}
+.view-controls>div{display:flex;align-items:center;gap:3px;background:#101c16ed;padding:4px;border:1px solid #adc49555;border-radius:10px;box-shadow:0 3px 12px #0003}
+.view-controls button{height:44px;min-width:44px;padding:0;border:0;background:transparent;font-size:25px;color:var(--lime);border-radius:6px}
+.view-controls button:hover{background:#30442a}.view-controls button:disabled{opacity:.25}
+.view-controls #zoomReset{min-width:52px;font-size:12px;font-variant-numeric:tabular-nums;color:#dce9ce}
+@media(max-height:520px){.view-controls{bottom:calc(70px + env(safe-area-inset-bottom))}.view-controls>span{display:none}}
