@@ -1,0 +1,1734 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arrow a Row 3D - 에로우 어 로우</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1e293b;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        .title-font {
+            font-family: 'Black Han Sans', sans-serif;
+        }
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        @keyframes floatUp {
+            0% { transform: translate(-50%, 0) scale(0.8); opacity: 1; }
+            40% { transform: translate(-50%, -25px) scale(1.15); opacity: 1; }
+            100% { transform: translate(-50%, -55px) scale(0.9); opacity: 0; }
+        }
+        .dmg-popup {
+            position: absolute;
+            pointer-events: none;
+            font-weight: 900;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.85), -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+            animation: floatUp 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            z-index: 30;
+            white-space: nowrap;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.6)); }
+            50% { transform: scale(1.05); filter: drop-shadow(0 0 18px rgba(250, 204, 21, 0.95)); }
+        }
+        .btn-glow {
+            animation: pulseGlow 2s infinite;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.78);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+    </style>
+</head>
+<body class="relative">
+
+    <!-- 3D WebGL Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- 2D Floating Overlay Container (HP Bars & Damage Numbers) -->
+    <div id="overlay-container" class="absolute inset-0 pointer-events-none overflow-hidden z-20"></div>
+
+    <!-- Top HUD -->
+    <div class="absolute top-0 left-0 right-0 p-3 md:p-4 pointer-events-none z-30 flex flex-col gap-2 max-w-5xl mx-auto">
+        <!-- Row 1: Wave, Progress, Gold & Sound -->
+        <div class="flex items-center justify-between gap-2">
+            <div class="glass-panel px-3.5 py-1.5 rounded-2xl flex items-center gap-3 shadow-lg">
+                <div class="bg-gradient-to-br from-amber-400 to-orange-600 text-slate-950 font-black px-2.5 py-0.5 rounded-xl text-xs md:text-sm tracking-tight">
+                    WAVE <span id="hud-wave">1</span>
+                </div>
+                <div class="w-28 sm:w-48 h-3.5 bg-slate-800 rounded-full overflow-hidden border border-slate-600 p-0.5">
+                    <div id="hud-progress" class="h-full bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 rounded-full transition-all duration-150" style="width: 0%"></div>
+                </div>
+                <span id="hud-boss-badge" class="hidden text-xs font-black text-red-400 animate-pulse">⚠️ BOSS</span>
+            </div>
+
+            <div class="flex items-center gap-2 pointer-events-auto">
+                <div class="glass-panel px-3.5 py-1.5 rounded-2xl flex items-center gap-2 shadow-lg border-amber-400/40">
+                    <span class="text-lg">🪙</span>
+                    <span id="hud-gold" class="font-black text-amber-300 text-sm md:text-base">100</span>
+                </div>
+                <button id="btn-sound" class="glass-panel w-10 h-10 rounded-2xl flex items-center justify-center text-lg hover:bg-slate-800 active:scale-95 transition shadow-lg">
+                    🔊
+                </button>
+            </div>
+        </div>
+
+        <!-- Row 2: Live Player Stats Pills -->
+        <div class="grid grid-cols-5 gap-1.5 md:gap-2.5 text-center">
+            <div class="glass-panel py-1.5 px-2 rounded-xl flex flex-col items-center">
+                <span class="text-[10px] md:text-xs text-slate-300 font-medium">⚔️ 공격력</span>
+                <span id="stat-dmg" class="font-black text-xs md:text-sm text-rose-400">12</span>
+            </div>
+            <div class="glass-panel py-1.5 px-2 rounded-xl flex flex-col items-center">
+                <span class="text-[10px] md:text-xs text-slate-300 font-medium">⚡ 연사속도</span>
+                <span id="stat-rate" class="font-black text-xs md:text-sm text-amber-300">2.5/s</span>
+            </div>
+            <div class="glass-panel py-1.5 px-2 rounded-xl flex flex-col items-center">
+                <span class="text-[10px] md:text-xs text-slate-300 font-medium">🏹 화살 수</span>
+                <span id="stat-multi" class="font-black text-xs md:text-sm text-emerald-400">1발</span>
+            </div>
+            <div class="glass-panel py-1.5 px-2 rounded-xl flex flex-col items-center">
+                <span class="text-[10px] md:text-xs text-slate-300 font-medium">🧝 동료/펫</span>
+                <span id="stat-allies" class="font-black text-xs md:text-sm text-cyan-300">0명</span>
+            </div>
+            <div class="glass-panel py-1.5 px-2 rounded-xl flex flex-col items-center">
+                <span class="text-[10px] md:text-xs text-slate-300 font-medium">✨ 화살진화</span>
+                <span id="stat-tier" class="font-black text-xs md:text-sm text-purple-300">나무화살</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Center Banner Announcement (Boss / Wave Clear / Powerup) -->
+    <div id="center-banner" class="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-40 hidden flex-col items-center text-center">
+        <div id="banner-title" class="title-font text-3xl md:text-5xl text-amber-300 drop-shadow-[0_5px_5px_rgba(0,0,0,0.9)] tracking-wider">WAVE CLEAR!</div>
+        <div id="banner-sub" class="text-sm md:text-lg font-bold text-white bg-slate-900/80 px-4 py-1 rounded-full mt-1 border border-white/20">보너스 골드 획득!</div>
+    </div>
+
+    <!-- Start / Permanent Upgrade Shop Modal -->
+    <div id="modal-screen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md">
+        <div class="w-full max-w-md bg-gradient-to-b from-slate-800 to-slate-900 border-2 border-indigo-400/40 rounded-3xl p-5 md:p-6 shadow-2xl text-white flex flex-col gap-4">
+            <!-- Header -->
+            <div class="text-center">
+                <div class="inline-block bg-indigo-500/30 border border-indigo-400/40 text-indigo-200 text-xs font-bold px-3 py-0.5 rounded-full mb-1">
+                    100% FREE PROCEDURAL 3D
+                </div>
+                <h1 id="modal-title" class="title-font text-4xl md:text-5xl bg-gradient-to-r from-amber-300 via-yellow-200 to-orange-400 bg-clip-text text-transparent drop-shadow">
+                    ARROW A ROW
+                </h1>
+                <p id="modal-subtitle" class="text-xs md:text-sm text-slate-300 mt-0.5">
+                    게이트와 보물상자를 쏴서 강화하고 몰려오는 군단을 처치하세요!
+                </p>
+            </div>
+
+            <!-- How to play mini card -->
+            <div class="bg-slate-950/60 border border-slate-700/80 rounded-2xl p-3 text-xs text-slate-300 space-y-1">
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-amber-300">💡 핵심 공략 팁</span>
+                    <span class="text-[11px] text-slate-400">마우스 드래그 / 터치 / A,D 방향키</span>
+                </div>
+                <p>• <span class="text-sky-400 font-bold">파란 게이트</span>는 이로운 효과, <span class="text-rose-400 font-bold">빨간 게이트</span>는 화살로 맞춰서 <span class="text-emerald-300 font-bold">+로 변환</span>시키세요!</p>
+                <p>• <span class="text-amber-300 font-bold">보물 상자</span>를 부수면 <span class="text-purple-300 font-bold">동료 궁수, 드래곤 펫, 화살 진화</span>를 얻습니다.</p>
+            </div>
+
+            <!-- Permanent Meta Shop -->
+            <div class="space-y-2">
+                <div class="flex items-center justify-between px-1">
+                    <span class="text-xs font-extrabold uppercase tracking-wider text-indigo-300">🏰 영구 능력치 상점 (골드 강화)</span>
+                    <span class="text-xs font-bold text-amber-300">보유 골드: <span id="shop-gold">100</span> 🪙</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <!-- Upgrade 1: Base Damage -->
+                    <button id="upg-dmg" class="bg-slate-800/90 hover:bg-slate-700/90 active:scale-95 transition border border-slate-600/80 rounded-2xl p-2.5 flex flex-col items-start text-left group">
+                        <div class="flex items-center justify-between w-full">
+                            <span class="text-xs font-bold text-rose-300">⚔️ 기본 공격력</span>
+                            <span id="upg-dmg-lvl" class="text-[10px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded font-bold">Lv.1</span>
+                        </div>
+                        <div id="upg-dmg-val" class="text-sm font-black text-white mt-0.5">12 ➔ 16</div>
+                        <div class="mt-2 w-full bg-amber-400/20 border border-amber-400/40 rounded-lg py-1 text-center text-xs font-black text-amber-300 group-hover:bg-amber-400 group-hover:text-slate-950 transition">
+                            🪙 <span id="upg-dmg-cost">50</span>
+                        </div>
+                    </button>
+
+                    <!-- Upgrade 2: Fire Rate -->
+                    <button id="upg-rate" class="bg-slate-800/90 hover:bg-slate-700/90 active:scale-95 transition border border-slate-600/80 rounded-2xl p-2.5 flex flex-col items-start text-left group">
+                        <div class="flex items-center justify-between w-full">
+                            <span class="text-xs font-bold text-amber-300">⚡ 기본 연사력</span>
+                            <span id="upg-rate-lvl" class="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">Lv.1</span>
+                        </div>
+                        <div id="upg-rate-val" class="text-sm font-black text-white mt-0.5">2.5/s ➔ 2.9/s</div>
+                        <div class="mt-2 w-full bg-amber-400/20 border border-amber-400/40 rounded-lg py-1 text-center text-xs font-black text-amber-300 group-hover:bg-amber-400 group-hover:text-slate-950 transition">
+                            🪙 <span id="upg-rate-cost">60</span>
+                        </div>
+                    </button>
+
+                    <!-- Upgrade 3: Starting Arrows -->
+                    <button id="upg-multi" class="bg-slate-800/90 hover:bg-slate-700/90 active:scale-95 transition border border-slate-600/80 rounded-2xl p-2.5 flex flex-col items-start text-left group">
+                        <div class="flex items-center justify-between w-full">
+                            <span class="text-xs font-bold text-emerald-300">🏹 시작 화살 수</span>
+                            <span id="upg-multi-lvl" class="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">Lv.1</span>
+                        </div>
+                        <div id="upg-multi-val" class="text-sm font-black text-white mt-0.5">1발 ➔ 2발</div>
+                        <div class="mt-2 w-full bg-amber-400/20 border border-amber-400/40 rounded-lg py-1 text-center text-xs font-black text-amber-300 group-hover:bg-amber-400 group-hover:text-slate-950 transition">
+                            🪙 <span id="upg-multi-cost">150</span>
+                        </div>
+                    </button>
+
+                    <!-- Upgrade 4: Starting Ally -->
+                    <button id="upg-ally" class="bg-slate-800/90 hover:bg-slate-700/90 active:scale-95 transition border border-slate-600/80 rounded-2xl p-2.5 flex flex-col items-start text-left group">
+                        <div class="flex items-center justify-between w-full">
+                            <span class="text-xs font-bold text-cyan-300">🧝 시작 동료 궁수</span>
+                            <span id="upg-ally-lvl" class="text-[10px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded font-bold">Lv.0</span>
+                        </div>
+                        <div id="upg-ally-val" class="text-sm font-black text-white mt-0.5">0명 ➔ 1명</div>
+                        <div class="mt-2 w-full bg-amber-400/20 border border-amber-400/40 rounded-lg py-1 text-center text-xs font-black text-amber-300 group-hover:bg-amber-400 group-hover:text-slate-950 transition">
+                            🪙 <span id="upg-ally-cost">200</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Start / Retry CTA -->
+            <button id="btn-start-game" class="btn-glow w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-orange-500 text-slate-950 font-black text-lg md:text-xl tracking-wide shadow-xl active:scale-95 transition">
+                🏹 출격하기 (START RUN)
+            </button>
+        </div>
+    </div>
+
+    <!-- Bottom Mobile Drag Guide Bar -->
+    <div id="drag-guide" class="fixed bottom-4 left-1/2 -translate-x-1/2 pointer-events-none z-20 opacity-80">
+        <div class="glass-panel px-5 py-1.5 rounded-full text-xs text-slate-200 flex items-center gap-2 shadow">
+            <span>◀</span>
+            <span class="font-bold">좌우로 드래그하여 이동 & 자동 사격</span>
+            <span>▶</span>
+        </div>
+    </div>
+
+    <script>
+        /********************************************************************
+         * 1. WEB AUDIO SYNTHESIZER (Zero External Audio Files)
+         ********************************************************************/
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+            toggleMute() {
+                this.muted = !this.muted;
+                return this.muted;
+            }
+            shoot(tier = 0) {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = tier >= 3 ? 'sawtooth' : 'triangle';
+                const baseFreq = 320 + tier * 90;
+                osc.frequency.setValueAtTime(baseFreq, now);
+                osc.frequency.exponentialRampToValueAtTime(110, now + 0.07);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.07);
+            }
+            hit() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(190, now);
+                osc.frequency.exponentialRampToValueAtTime(65, now + 0.05);
+                gain.gain.setValueAtTime(0.07, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.05);
+            }
+            gateTick() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(520, now);
+                osc.frequency.exponentialRampToValueAtTime(780, now + 0.06);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.06);
+            }
+            powerup(isPositive = true) {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const notes = isPositive ? [523.25, 659.25, 783.99, 1046.5] : [300, 240, 180];
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = isPositive ? 'triangle' : 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.055);
+                    gain.gain.setValueAtTime(0.11, now + idx * 0.055);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.055 + 0.16);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + idx * 0.055);
+                    osc.stop(now + idx * 0.055 + 0.16);
+                });
+            }
+            bossRoar() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(130, now);
+                osc.frequency.linearRampToValueAtTime(55, now + 0.65);
+                gain.gain.setValueAtTime(0.18, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.65);
+            }
+        }
+
+        const sfx = new SoundFX();
+
+        /********************************************************************
+         * 2. PERSISTENT META PROGRESSION & GAME CONFIG
+         ********************************************************************/
+        const ARROW_TIERS = [
+            { name: '나무화살', color: 0xd97706, emissive: 0x000000, dmgMult: 1.0, speed: 52 },
+            { name: '강철화살', color: 0x38bdf8, emissive: 0x0284c7, dmgMult: 1.45, speed: 58 },
+            { name: '황금화살', color: 0xfacc15, emissive: 0xca8a04, dmgMult: 2.1, speed: 64 },
+            { name: '레이저화살', color: 0xe879f9, emissive: 0xc026d3, dmgMult: 3.2, speed: 74 }
+        ];
+
+        const metaState = {
+            gold: 100,
+            dmgLvl: 1,
+            rateLvl: 1,
+            multiLvl: 1,
+            allyLvl: 0
+        };
+
+        // Load saved progression if available
+        try {
+            const saved = localStorage.getItem('arrow_a_row_save_v1');
+            if (saved) Object.assign(metaState, JSON.parse(saved));
+        } catch (e) {}
+
+        function saveMeta() {
+            try {
+                localStorage.setItem('arrow_a_row_save_v1', JSON.stringify(metaState));
+            } catch (e) {}
+        }
+
+        /********************************************************************
+         * 3. THREE.JS SCENE, CAMERA & PROCEDURAL ENVIRONMENT
+         ********************************************************************/
+        const canvas = document.getElementById('game-canvas');
+        const overlayContainer = document.getElementById('overlay-container');
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x7dd3fc);
+        scene.fog = new THREE.FogExp2(0x7dd3fc, 0.011);
+
+        const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 160);
+        camera.position.set(0, 8.8, 12.2);
+        camera.lookAt(0, 1.2, -9);
+
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Lighting
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x334155, 0.85);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xfffbeb, 0.95);
+        dirLight.position.set(14, 28, 18);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.near = 1;
+        dirLight.shadow.camera.far = 90;
+        const d = 22;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        // Bridge / Road Track
+        const ROAD_WIDTH = 10.4;
+        const PLAY_LIMIT_X = 4.3;
+
+        const roadGroup = new THREE.Group();
+        scene.add(roadGroup);
+
+        const roadGeo = new THREE.BoxGeometry(ROAD_WIDTH, 1, 200);
+        const roadMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.75 });
+        const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+        roadMesh.position.set(0, -0.5, -75);
+        roadMesh.receiveShadow = true;
+        roadGroup.add(roadMesh);
+
+        // Golden Side Borders
+        const railGeo = new THREE.BoxGeometry(0.45, 0.35, 200);
+        const railMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4, metalness: 0.2 });
+        const leftRail = new THREE.Mesh(railGeo, railMat);
+        leftRail.position.set(-ROAD_WIDTH / 2 - 0.15, 0.15, -75);
+        const rightRail = leftRail.clone();
+        rightRail.position.x = ROAD_WIDTH / 2 + 0.15;
+        roadGroup.add(leftRail, rightRail);
+
+        // Moving Road Stripes & Fantasy Scenery (Trees & Floating Clouds)
+        const sceneryItems = [];
+        const stripeGeo = new THREE.PlaneGeometry(0.28, 3.2);
+        const stripeMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
+
+        function createLowPolyTree() {
+            const g = new THREE.Group();
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.22, 0.32, 1.4, 6),
+                new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 })
+            );
+            trunk.position.y = 0.7;
+            g.add(trunk);
+
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.65 });
+            const c1 = new THREE.Mesh(new THREE.ConeGeometry(1.25, 2.2, 7), leavesMat);
+            c1.position.y = 2.0;
+            const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.95, 1.8, 7), leavesMat);
+            c2.position.y = 3.1;
+            g.add(c1, c2);
+            return g;
+        }
+
+        function createCloud() {
+            const g = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+            for (let i = 0; i < 3; i++) {
+                const puff = new THREE.Mesh(new THREE.DodecahedronGeometry(1.4 - i * 0.25, 1), mat);
+                puff.position.set((i - 1) * 1.1, (i % 2) * 0.3, 0);
+                g.add(puff);
+            }
+            return g;
+        }
+
+        for (let i = 0; i < 24; i++) {
+            const zPos = -i * 7.5 + 8;
+            // Center lane dividers
+            const s1 = new THREE.Mesh(stripeGeo, stripeMat);
+            s1.rotation.x = -Math.PI / 2;
+            s1.position.set(-2.3, 0.02, zPos);
+            scene.add(s1);
+            sceneryItems.push({ mesh: s1, speedMult: 1 });
+
+            const s2 = s1.clone();
+            s2.position.x = 2.3;
+            scene.add(s2);
+            sceneryItems.push({ mesh: s2, speedMult: 1 });
+
+            // Side fantasy islands & trees
+            if (i % 2 === 0) {
+                const side = (i % 4 === 0) ? -1 : 1;
+                const island = new THREE.Group();
+                const rock = new THREE.Mesh(
+                    new THREE.CylinderGeometry(2.2, 0.9, 2.2, 7),
+                    new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.85 })
+                );
+                rock.position.y = -1.1;
+                const grass = new THREE.Mesh(
+                    new THREE.CylinderGeometry(2.3, 2.2, 0.4, 7),
+                    new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.7 })
+                );
+                grass.position.y = 0.1;
+                island.add(rock, grass);
+
+                const tree = createLowPolyTree();
+                tree.position.y = 0.3;
+                island.add(tree);
+
+                island.position.set(side * (ROAD_WIDTH / 2 + 4.2 + (i % 3)), -0.3, zPos);
+                scene.add(island);
+                sceneryItems.push({ mesh: island, speedMult: 1 });
+            }
+
+            if (i % 3 === 0) {
+                const cloud = createCloud();
+                const side = (i % 2 === 0) ? -1 : 1;
+                cloud.position.set(side * (12 + (i % 5) * 2), 6 + (i % 4), zPos);
+                scene.add(cloud);
+                sceneryItems.push({ mesh: cloud, speedMult: 0.45 });
+            }
+        }
+
+        /********************************************************************
+         * 4. PROCEDURAL 3D CHARACTERS (Archer, Allies, Dragon, Monsters)
+         ********************************************************************/
+        function createArcherCharacter(isAlly = false) {
+            const group = new THREE.Group();
+            const scale = isAlly ? 0.72 : 1.0;
+            group.scale.set(scale, scale, scale);
+
+            const mainColor = isAlly ? 0x0ea5e9 : 0x10b981; // Emerald hood for main player, Sky blue for ally
+            const capeColor = isAlly ? 0x0284c7 : 0x047857;
+
+            // Boots / Legs
+            const legGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.55, 8);
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x451a03 });
+            const leftLeg = new THREE.Mesh(legGeo, legMat);
+            leftLeg.position.set(-0.2, 0.28, 0);
+            const rightLeg = new THREE.Mesh(legGeo, legMat);
+            rightLeg.position.set(0.2, 0.28, 0);
+            group.add(leftLeg, rightLeg);
+
+            // Tunic Body
+            const bodyGeo = new THREE.ConeGeometry(0.52, 1.05, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: mainColor, roughness: 0.55 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.95;
+            body.castShadow = true;
+            group.add(body);
+
+            // Flowing Cape
+            const capeGeo = new THREE.BoxGeometry(0.76, 0.95, 0.12);
+            const capeMat = new THREE.MeshStandardMaterial({ color: capeColor, roughness: 0.7 });
+            const cape = new THREE.Mesh(capeGeo, capeMat);
+            cape.position.set(0, 0.9, 0.32);
+            cape.rotation.x = 0.24;
+            group.add(cape);
+
+            // Cute Head
+            const headGeo = new THREE.SphereGeometry(0.36, 14, 14);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.4 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 1.62;
+            group.add(head);
+
+            // Archer Hood & Feather
+            const hoodGeo = new THREE.ConeGeometry(0.44, 0.65, 8);
+            const hood = new THREE.Mesh(hoodGeo, bodyMat);
+            hood.position.set(0, 1.98, 0.04);
+            hood.rotation.x = -0.18;
+            group.add(hood);
+
+            const featherGeo = new THREE.BoxGeometry(0.08, 0.38, 0.14);
+            const featherMat = new THREE.MeshStandardMaterial({ color: 0xfacc15 });
+            const feather = new THREE.Mesh(featherGeo, featherMat);
+            feather.position.set(0.22, 2.15, 0.1);
+            feather.rotation.z = -0.35;
+            group.add(feather);
+
+            // 3D Curved Bow facing forward (-Z)
+            const bowGroup = new THREE.Group();
+            const bowArc = new THREE.Mesh(
+                new THREE.TorusGeometry(0.55, 0.06, 8, 16, Math.PI),
+                new THREE.MeshStandardMaterial({ color: 0xb45309, metalness: 0.2, roughness: 0.5 })
+            );
+            bowArc.rotation.z = -Math.PI / 2;
+            bowArc.rotation.y = Math.PI / 2;
+            bowGroup.add(bowArc);
+
+            const bowString = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.012, 0.012, 1.1, 6),
+                new THREE.MeshBasicMaterial({ color: 0xf8fafc })
+            );
+            bowGroup.add(bowString);
+
+            bowGroup.position.set(0.42, 1.1, -0.35);
+            group.add(bowGroup);
+
+            group.userData = { leftLeg, rightLeg, bowGroup, cape };
+            return group;
+        }
+
+        function createPetDragon() {
+            const dragon = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.4 });
+            const bellyMat = new THREE.MeshStandardMaterial({ color: 0xfde047, roughness: 0.5 });
+
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 12), bodyMat);
+            dragon.add(body);
+
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.28, 0.45), bodyMat);
+            head.position.set(0, 0.2, -0.32);
+            dragon.add(head);
+
+            // Cute Wings
+            const wingGeo = new THREE.BoxGeometry(0.55, 0.06, 0.32);
+            const leftWing = new THREE.Mesh(wingGeo, bellyMat);
+            leftWing.position.set(-0.42, 0.12, 0);
+            const rightWing = new THREE.Mesh(wingGeo, bellyMat);
+            rightWing.position.set(0.42, 0.12, 0);
+            dragon.add(leftWing, rightWing);
+
+            dragon.userData = { leftWing, rightWing };
+            return dragon;
+        }
+
+        function createMonsterMesh(type) {
+            const group = new THREE.Group();
+            let hitMesh = null;
+
+            if (type === 'slime') {
+                const geo = new THREE.SphereGeometry(0.68, 14, 12);
+                geo.scale(1.15, 0.82, 1.15);
+                const mat = new THREE.MeshStandardMaterial({ color: 0xa855f7, roughness: 0.25, transparent: true, opacity: 0.92 });
+                const body = new THREE.Mesh(geo, mat);
+                body.position.y = 0.52;
+                body.castShadow = true;
+                group.add(body);
+                hitMesh = body;
+            } else if (type === 'goblin') {
+                const mat = new THREE.MeshStandardMaterial({ color: 0x65a30d, roughness: 0.6 });
+                const body = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.95, 0.5), mat);
+                body.position.y = 0.6;
+                body.castShadow = true;
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 12), mat);
+                head.position.y = 1.32;
+                // Pointy ears
+                const earGeo = new THREE.ConeGeometry(0.12, 0.4, 6);
+                const earL = new THREE.Mesh(earGeo, mat);
+                earL.position.set(-0.45, 1.38, 0);
+                earL.rotation.z = 1.1;
+                const earR = earL.clone();
+                earR.position.x = 0.45;
+                earR.rotation.z = -1.1;
+                group.add(body, head, earL, earR);
+                hitMesh = body;
+            } else if (type === 'skeleton') {
+                const boneMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.4 });
+                const armorMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.5, roughness: 0.4 });
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.32, 1.15, 8), armorMat);
+                body.position.y = 0.72;
+                body.castShadow = true;
+                const skull = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.58, 0.55), boneMat);
+                skull.position.y = 1.58;
+                // Shield
+                const shield = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.85, 0.12), armorMat);
+                shield.position.set(-0.42, 0.8, 0.32);
+                group.add(body, skull, shield);
+                hitMesh = body;
+            } else if (type === 'boss') {
+                const bossMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.35 });
+                const body = new THREE.Mesh(new THREE.BoxGeometry(2.1, 2.5, 1.5), bossMat);
+                body.position.y = 1.45;
+                body.castShadow = true;
+                const head = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.2, 1.3), bossMat);
+                head.position.y = 3.2;
+
+                // Giant Gold Horns
+                const hornMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.4 });
+                const hornL = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.1, 8), hornMat);
+                hornL.position.set(-0.75, 3.85, 0);
+                hornL.rotation.z = 0.45;
+                const hornR = hornL.clone();
+                hornR.position.x = 0.75;
+                hornR.rotation.z = -0.45;
+
+                group.add(body, head, hornL, hornR);
+                hitMesh = body;
+            }
+
+            // Eyes facing player (+Z)
+            const eyeScale = type === 'boss' ? 2.2 : 1;
+            const eyeGeo = new THREE.SphereGeometry(0.08 * eyeScale, 8, 8);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: type === 'boss' ? 0xfef08a : 0xef4444 });
+            const eyeY = type === 'slime' ? 0.6 : type === 'boss' ? 3.25 : 1.42;
+            const eyeZ = type === 'slime' ? 0.62 : type === 'boss' ? 0.68 : 0.36;
+            const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeL.position.set(-0.16 * eyeScale, eyeY, eyeZ);
+            const eyeR = eyeL.clone();
+            eyeR.position.x = 0.16 * eyeScale;
+            group.add(eyeL, eyeR);
+
+            group.userData = { hitMesh, origColor: hitMesh.material.color.getHex() };
+            return group;
+        }
+
+        /********************************************************************
+         * 5. DYNAMIC CANVAS TEXTURE FOR CHOICE GATES & UPGRADE CRATES
+         ********************************************************************/
+        function createGateLabelTexture(titleText, valText, isPositive) {
+            const c = document.createElement('canvas');
+            c.width = 256;
+            c.height = 256;
+            const ctx = c.getContext('2d');
+
+            // Translucent Gradient Background
+            const grad = ctx.createLinearGradient(0, 0, 0, 256);
+            if (isPositive) {
+                grad.addColorStop(0, 'rgba(14, 165, 233, 0.88)');
+                grad.addColorStop(1, 'rgba(29, 78, 216, 0.72)');
+            } else {
+                grad.addColorStop(0, 'rgba(244, 63, 94, 0.88)');
+                grad.addColorStop(1, 'rgba(159, 18, 57, 0.72)');
+            }
+            ctx.fillStyle = grad;
+            ctx.fillRect(8, 8, 240, 240);
+
+            // Neon Border
+            ctx.strokeStyle = isPositive ? '#7dd3fc' : '#fda4af';
+            ctx.lineWidth = 10;
+            ctx.strokeRect(8, 8, 240, 240);
+
+            // Title Text
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 34px "Noto Sans KR", sans-serif';
+            ctx.shadowColor = 'rgba(0,0,0,0.65)';
+            ctx.shadowBlur = 6;
+            ctx.fillText(titleText, 128, 85);
+
+            // Big Value Text
+            ctx.font = '900 66px "Noto Sans KR", sans-serif';
+            ctx.fillStyle = isPositive ? '#fef08a' : '#ffe4e6';
+            ctx.fillText(valText, 128, 172);
+
+            // Bottom Hint
+            ctx.font = 'bold 20px "Noto Sans KR", sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.fillText('🎯 화살로 쏴서 수치 UP!', 128, 224);
+
+            const tex = new THREE.CanvasTexture(c);
+            tex.needsUpdate = true;
+            return tex;
+        }
+
+        /********************************************************************
+         * 6. GAME STATE & ENTITIES
+         ********************************************************************/
+        const playerRoot = new THREE.Group();
+        playerRoot.position.set(0, 0, 4.5);
+        scene.add(playerRoot);
+
+        const mainArcherMesh = createArcherCharacter(false);
+        playerRoot.add(mainArcherMesh);
+
+        const allyMeshes = [];
+        const dragonMeshes = [];
+
+        let gameState = 'MENU'; // MENU | PLAYING | GAMEOVER
+        let targetX = 0;
+        let currentWave = 1;
+        let waveProgress = 0;
+        let runGoldEarned = 0;
+
+        const playerStats = {
+            damage: 12,
+            fireRate: 2.5,
+            multiShot: 1,
+            allies: 0,
+            dragons: 0,
+            arrowTier: 0
+        };
+
+        let shootTimer = 0;
+        let dragonShootTimer = 0;
+        let spawnCycleTimer = 0;
+        let spawnPhase = 0; // Cycles between Enemies -> Gates -> Enemies -> Treasure Crate -> Boss
+
+        const arrows = [];
+        const gates = [];
+        const crates = [];
+        const enemies = [];
+        const particles = [];
+
+        function syncCompanionVisuals() {
+            // Sync Ally Archers
+            while (allyMeshes.length < playerStats.allies && allyMeshes.length < 6) {
+                const ally = createArcherCharacter(true);
+                playerRoot.add(ally);
+                allyMeshes.push(ally);
+            }
+            while (allyMeshes.length > playerStats.allies) {
+                const rem = allyMeshes.pop();
+                playerRoot.remove(rem);
+            }
+            // Arrange allies cleanly around player
+            const offsets = [
+                [-1.05, 0, 0.35],
+                [1.05, 0, 0.35],
+                [-1.85, 0, 0.75],
+                [1.85, 0, 0.75],
+                [-0.65, 0, 1.05],
+                [0.65, 0, 1.05]
+            ];
+            allyMeshes.forEach((m, idx) => {
+                const off = offsets[idx] || [0, 0, 1];
+                m.position.set(off[0], off[1], off[2]);
+            });
+
+            // Sync Floating Pet Dragons
+            while (dragonMeshes.length < playerStats.dragons && dragonMeshes.length < 2) {
+                const drg = createPetDragon();
+                playerRoot.add(drg);
+                dragonMeshes.push(drg);
+            }
+            while (dragonMeshes.length > playerStats.dragons) {
+                const rem = dragonMeshes.pop();
+                playerRoot.remove(rem);
+            }
+        }
+
+        function updateHUD() {
+            document.getElementById('hud-wave').textContent = currentWave;
+            document.getElementById('hud-progress').style.width = `${Math.min(100, waveProgress)}%`;
+            document.getElementById('hud-gold').textContent = metaState.gold;
+            document.getElementById('shop-gold').textContent = metaState.gold;
+
+            const tierObj = ARROW_TIERS[playerStats.arrowTier];
+            const effectiveDmg = Math.round(playerStats.damage * tierObj.dmgMult);
+
+            document.getElementById('stat-dmg').textContent = effectiveDmg;
+            document.getElementById('stat-rate').textContent = `${playerStats.fireRate.toFixed(1)}/s`;
+            document.getElementById('stat-multi').textContent = `${playerStats.multiShot}발`;
+            document.getElementById('stat-allies').textContent = `${playerStats.allies + playerStats.dragons}명`;
+            document.getElementById('stat-tier').textContent = tierObj.name;
+        }
+
+        function showBanner(title, subtitle, duration = 2000) {
+            const banner = document.getElementById('center-banner');
+            document.getElementById('banner-title').textContent = title;
+            document.getElementById('banner-sub').textContent = subtitle;
+            banner.classList.remove('hidden');
+            banner.classList.add('flex');
+            clearTimeout(banner._timer);
+            banner._timer = setTimeout(() => {
+                banner.classList.add('hidden');
+                banner.classList.remove('flex');
+            }, duration);
+        }
+
+        function spawnFloatingText(worldPos, text, colorClass = 'text-amber-300 text-base') {
+            const vec = worldPos.clone();
+            vec.project(camera);
+            if (vec.z > 1) return;
+            const x = (vec.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-(vec.y * 0.5) + 0.5) * window.innerHeight;
+
+            const el = document.createElement('div');
+            el.className = `dmg-popup ${colorClass}`;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            el.textContent = text;
+            overlayContainer.appendChild(el);
+            setTimeout(() => el.remove(), 750);
+        }
+
+        function spawnParticleBurst(pos, colorHex, count = 10) {
+            for (let i = 0; i < count; i++) {
+                const mesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.22, 0.22, 0.22),
+                    new THREE.MeshBasicMaterial({ color: colorHex })
+                );
+                mesh.position.copy(pos);
+                scene.add(mesh);
+                particles.push({
+                    mesh,
+                    vel: new THREE.Vector3(
+                        (Math.random() - 0.5) * 9,
+                        Math.random() * 7 + 2,
+                        (Math.random() - 0.5) * 9
+                    ),
+                    life: 0.45
+                });
+            }
+        }
+
+        /********************************************************************
+         * 7. SPAWNERS: GATES, UPGRADE CRATES & MONSTER WAVES
+         ********************************************************************/
+        function formatGateVal(statType, val) {
+            const sign = val >= 0 ? '+' : '';
+            if (statType === 'dmg') return `${sign}${val}`;
+            if (statType === 'rate') return `${sign}${val}%`;
+            if (statType === 'multi') return `${sign}${val}발`;
+            return `${sign}${val}`;
+        }
+
+        function getGateTitle(statType) {
+            if (statType === 'dmg') return '⚔️ 공격력';
+            if (statType === 'rate') return '⚡ 연사속도';
+            if (statType === 'multi') return '🏹 화살 수';
+            return '강화';
+        }
+
+        function refreshGateVisual(gateObj) {
+            const isPos = gateObj.val >= 0;
+            const tex = createGateLabelTexture(
+                getGateTitle(gateObj.statType),
+                formatGateVal(gateObj.statType, gateObj.val),
+                isPos
+            );
+            if (gateObj.panel.material.map) gateObj.panel.material.map.dispose();
+            gateObj.panel.material.map = tex;
+            gateObj.panel.material.needsUpdate = true;
+            gateObj.pillarL.material.color.setHex(isPos ? 0x0284c7 : 0xe11d48);
+            gateObj.pillarR.material.color.setHex(isPos ? 0x0284c7 : 0xe11d48);
+        }
+
+        function spawnChoiceGatePair() {
+            const zPos = -58;
+            const leftIsGood = Math.random() > 0.5;
+            const statOptions = ['dmg', 'rate', 'multi'];
+
+            [-2.35, 2.35].forEach((xPos, idx) => {
+                const isGood = (idx === 0) ? leftIsGood : !leftIsGood;
+                const statType = statOptions[Math.floor(Math.random() * statOptions.length)];
+
+                let val = 0;
+                let step = 1;
+                if (statType === 'dmg') {
+                    val = isGood ? 5 + currentWave * 2 : -(4 + currentWave);
+                    step = 2;
+                } else if (statType === 'rate') {
+                    val = isGood ? 15 : -10;
+                    step = 5;
+                } else if (statType === 'multi') {
+                    val = isGood ? 1 : -1;
+                    step = 1;
+                }
+
+                const group = new THREE.Group();
+                group.position.set(xPos, 0, zPos);
+
+                const panelGeo = new THREE.PlaneGeometry(4.1, 3.4);
+                const panelMat = new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide });
+                const panel = new THREE.Mesh(panelGeo, panelMat);
+                panel.position.y = 1.7;
+                group.add(panel);
+
+                const pillarGeo = new THREE.CylinderGeometry(0.14, 0.14, 3.6, 8);
+                const pillarMat = new THREE.MeshStandardMaterial({ color: 0x0284c7 });
+                const pillarL = new THREE.Mesh(pillarGeo, pillarMat);
+                pillarL.position.set(-2.05, 1.8, 0);
+                const pillarR = pillarL.clone();
+                pillarR.position.x = 2.05;
+                group.add(pillarL, pillarR);
+
+                scene.add(group);
+
+                const gateObj = {
+                    group,
+                    panel,
+                    pillarL,
+                    pillarR,
+                    statType,
+                    val,
+                    step,
+                    hitCooldown: 0
+                };
+                refreshGateVisual(gateObj);
+                gates.push(gateObj);
+            });
+        }
+
+        function spawnTreasureCrates() {
+            const zPos = -58;
+            const rewardPool = [
+                { type: 'ally', label: '🧝 동료 궁수 +1', hp: 3 + currentWave * 2, color: 0x06b6d4 },
+                { type: 'evolve', label: '✨ 화살 진화 UP', hp: 4 + currentWave * 2, color: 0xa855f7 },
+                { type: 'dragon', label: '🐉 드래곤 펫 소환', hp: 5 + currentWave * 2, color: 0xf97316 },
+                { type: 'dmgx2', label: '🔥 공격력 x1.5배', hp: 5 + currentWave * 2, color: 0xeab308 }
+            ];
+
+            // Pick 2 distinct rewards
+            const shuffled = rewardPool.sort(() => Math.random() - 0.5).slice(0, 2);
+
+            [-2.2, 2.2].forEach((xPos, idx) => {
+                const rw = shuffled[idx];
+                const group = new THREE.Group();
+                group.position.set(xPos, 0, zPos);
+
+                const box = new THREE.Mesh(
+                    new THREE.BoxGeometry(2.1, 1.8, 1.8),
+                    new THREE.MeshStandardMaterial({ color: rw.color, roughness: 0.4, metalness: 0.2 })
+                );
+                box.position.y = 0.9;
+                box.castShadow = true;
+                group.add(box);
+
+                // Golden ribbon trim
+                const trim = new THREE.Mesh(
+                    new THREE.BoxGeometry(2.18, 0.35, 1.88),
+                    new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.5 })
+                );
+                trim.position.y = 0.95;
+                group.add(trim);
+
+                // DOM Floating Label for Crate
+                const domEl = document.createElement('div');
+                domEl.className = 'absolute -translate-x-1/2 -translate-y-full pointer-events-none text-center';
+                domEl.innerHTML = `
+                    <div class="bg-slate-900/90 border border-amber-400/70 px-2.5 py-1 rounded-xl shadow-lg">
+                        <div class="text-[11px] font-black text-amber-300 whitespace-nowrap">${rw.label}</div>
+                        <div class="text-xs font-extrabold text-white">🔨 <span class="crate-hp">${rw.hp}</span>타 남음</div>
+                    </div>
+                `;
+                overlayContainer.appendChild(domEl);
+
+                scene.add(group);
+                crates.push({
+                    group,
+                    box,
+                    rewardType: rw.type,
+                    label: rw.label,
+                    hp: rw.hp,
+                    domEl,
+                    hpSpan: domEl.querySelector('.crate-hp')
+                });
+            });
+        }
+
+        function spawnEnemyRow(isBoss = false) {
+            const zPos = -60;
+            if (isBoss) {
+                sfx.bossRoar();
+                document.getElementById('hud-boss-badge').classList.remove('hidden');
+                showBanner(`⚠️ WAVE ${currentWave} BOSS!`, '거대 레드 데몬이 출현했습니다!', 2200);
+
+                const bossMaxHp = Math.round(260 * Math.pow(1.65, currentWave - 1));
+                createSingleEnemy('boss', 0, zPos, bossMaxHp);
+                return;
+            }
+
+            const count = Math.min(4, 2 + Math.floor(Math.random() * 3));
+            const spacing = 2.25;
+            const startX = -((count - 1) * spacing) / 2;
+
+            const types = ['slime', 'goblin', 'skeleton'];
+            const pickedType = types[Math.min(types.length - 1, Math.floor((currentWave - 1 + Math.random() * 2) % types.length))];
+            const baseHp = Math.round((28 + currentWave * 22) * (pickedType === 'skeleton' ? 1.35 : 1.0));
+
+            for (let i = 0; i < count; i++) {
+                const xPos = startX + i * spacing;
+                createSingleEnemy(pickedType, xPos, zPos - (i % 2) * 1.1, baseHp);
+            }
+        }
+
+        function createSingleEnemy(type, x, z, maxHp) {
+            const mesh = createMonsterMesh(type);
+            mesh.position.set(x, 0, z);
+            scene.add(mesh);
+
+            const domEl = document.createElement('div');
+            domEl.className = 'absolute -translate-x-1/2 -translate-y-full pointer-events-none flex flex-col items-center';
+            const barWidth = type === 'boss' ? 'w-28 h-3' : 'w-14 h-2';
+            domEl.innerHTML = `
+                <span class="enemy-hp-txt text-[11px] font-black text-white drop-shadow">${maxHp}</span>
+                <div class="${barWidth} bg-slate-900/90 rounded-full overflow-hidden border border-white/30 p-0.5">
+                    <div class="enemy-hp-bar h-full bg-gradient-to-r from-rose-500 to-amber-400 rounded-full" style="width:100%"></div>
+                </div>
+            `;
+            overlayContainer.appendChild(domEl);
+
+            enemies.push({
+                type,
+                mesh,
+                hp: maxHp,
+                maxHp,
+                radius: type === 'boss' ? 1.65 : 0.85,
+                domEl,
+                hpTxt: domEl.querySelector('.enemy-hp-txt'),
+                hpBar: domEl.querySelector('.enemy-hp-bar'),
+                flashTimer: 0
+            });
+        }
+
+        /********************************************************************
+         * 8. SHOOTING & PROJECTILE SYSTEM
+         ********************************************************************/
+        function fireArrowVolley() {
+            sfx.shoot(playerStats.arrowTier);
+            const tierObj = ARROW_TIERS[playerStats.arrowTier];
+            const arrowDmg = Math.round(playerStats.damage * tierObj.dmgMult);
+
+            // Main Player Multi-Shot Fan
+            const count = playerStats.multiShot;
+            const spreadStep = 0.34;
+            const startOff = -((count - 1) * spreadStep) / 2;
+
+            for (let i = 0; i < count; i++) {
+                const xOff = startOff + i * spreadStep;
+                const spawnPos = new THREE.Vector3(
+                    playerRoot.position.x + xOff,
+                    1.05,
+                    playerRoot.position.z - 0.6
+                );
+                const angleX = (i - (count - 1) / 2) * 0.035;
+                spawnArrowEntity(spawnPos, angleX, arrowDmg, tierObj, false);
+            }
+
+            // Companion Ally Archers also shoot!
+            allyMeshes.forEach((ally) => {
+                const worldPos = new THREE.Vector3();
+                ally.getWorldPosition(worldPos);
+                worldPos.y = 0.85;
+                worldPos.z -= 0.4;
+                spawnArrowEntity(worldPos, 0, Math.max(4, Math.round(arrowDmg * 0.55)), tierObj, false);
+            });
+        }
+
+        function fireDragonFireballs() {
+            if (dragonMeshes.length === 0) return;
+            const tierObj = ARROW_TIERS[playerStats.arrowTier];
+            const fireDmg = Math.round(playerStats.damage * tierObj.dmgMult * 1.4);
+
+            dragonMeshes.forEach((drg) => {
+                const worldPos = new THREE.Vector3();
+                drg.getWorldPosition(worldPos);
+                worldPos.z -= 0.5;
+                spawnArrowEntity(worldPos, 0, fireDmg, tierObj, true);
+            });
+        }
+
+        function spawnArrowEntity(pos, angleX, dmg, tierObj, isFireball) {
+            let mesh;
+            if (isFireball) {
+                mesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.26, 10, 10),
+                    new THREE.MeshBasicMaterial({ color: 0xf97316 })
+                );
+            } else {
+                mesh = new THREE.Group();
+                const shaft = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.045, 0.045, 1.15, 6),
+                    new THREE.MeshStandardMaterial({
+                        color: tierObj.color,
+                        emissive: tierObj.emissive,
+                        roughness: 0.3
+                    })
+                );
+                shaft.rotation.x = Math.PI / 2;
+                const tip = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.12, 0.32, 6),
+                    new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: 0.6 })
+                );
+                tip.rotation.x = -Math.PI / 2;
+                tip.position.z = -0.65;
+                mesh.add(shaft, tip);
+            }
+
+            mesh.position.copy(pos);
+            scene.add(mesh);
+
+            arrows.push({
+                mesh,
+                dmg,
+                isFireball,
+                velX: Math.sin(angleX) * tierObj.speed,
+                velZ: -Math.cos(angleX) * tierObj.speed
+            });
+        }
+
+        /********************************************************************
+         * 9. APPLYING BUFFS FROM GATES & CRATES
+         ********************************************************************/
+        function applyGateEffect(gate) {
+            const isPos = gate.val >= 0;
+            sfx.powerup(isPos);
+
+            if (gate.statType === 'dmg') {
+                playerStats.damage = Math.max(4, playerStats.damage + gate.val);
+            } else if (gate.statType === 'rate') {
+                const mult = 1 + gate.val / 100;
+                playerStats.fireRate = Math.min(12, Math.max(1.0, playerStats.fireRate * mult));
+            } else if (gate.statType === 'multi') {
+                playerStats.multiShot = Math.min(9, Math.max(1, playerStats.multiShot + gate.val));
+            }
+
+            spawnFloatingText(
+                playerRoot.position.clone().add(new THREE.Vector3(0, 2.2, 0)),
+                `${getGateTitle(gate.statType)} ${formatGateVal(gate.statType, gate.val)}!`,
+                isPos ? 'text-cyan-300 text-lg' : 'text-rose-400 text-lg'
+            );
+            updateHUD();
+        }
+
+        function applyCrateReward(crate) {
+            sfx.powerup(true);
+            if (crate.rewardType === 'ally') {
+                playerStats.allies = Math.min(6, playerStats.allies + 1);
+                syncCompanionVisuals();
+            } else if (crate.rewardType === 'dragon') {
+                playerStats.dragons = Math.min(2, playerStats.dragons + 1);
+                syncCompanionVisuals();
+            } else if (crate.rewardType === 'evolve') {
+                playerStats.arrowTier = Math.min(ARROW_TIERS.length - 1, playerStats.arrowTier + 1);
+            } else if (crate.rewardType === 'dmgx2') {
+                playerStats.damage = Math.round(playerStats.damage * 1.5);
+            }
+
+            spawnFloatingText(
+                crate.group.position.clone().add(new THREE.Vector3(0, 2.0, 0)),
+                `🎉 ${crate.label} 획득!`,
+                'text-amber-300 text-lg'
+            );
+            updateHUD();
+        }
+
+        /********************************************************************
+         * 10. CONTROLS (Smooth Drag, Touch & Keyboard)
+         ********************************************************************/
+        let isPointerDown = false;
+        let lastPointerX = 0;
+        const keysPressed = { left: false, right: false };
+
+        window.addEventListener('pointerdown', (e) => {
+            if (gameState !== 'PLAYING') return;
+            isPointerDown = true;
+            lastPointerX = e.clientX;
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (!isPointerDown || gameState !== 'PLAYING') return;
+            const dx = e.clientX - lastPointerX;
+            lastPointerX = e.clientX;
+            const sensitivity = (ROAD_WIDTH / window.innerWidth) * 1.45;
+            targetX = Math.max(-PLAY_LIMIT_X, Math.min(PLAY_LIMIT_X, targetX + dx * sensitivity));
+        });
+
+        window.addEventListener('pointerup', () => { isPointerDown = false; });
+        window.addEventListener('pointercancel', () => { isPointerDown = false; });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keysPressed.left = true;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keysPressed.right = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keysPressed.left = false;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keysPressed.right = false;
+        });
+
+        /********************************************************************
+         * 11. META SHOP & RUN LIFECYCLE
+         ********************************************************************/
+        function getUpgradeCosts() {
+            return {
+                dmg: Math.round(50 * Math.pow(1.4, metaState.dmgLvl - 1)),
+                rate: Math.round(60 * Math.pow(1.45, metaState.rateLvl - 1)),
+                multi: Math.round(150 * Math.pow(2.1, metaState.multiLvl - 1)),
+                ally: Math.round(200 * Math.pow(2.2, metaState.allyLvl))
+            };
+        }
+
+        function refreshShopUI() {
+            const costs = getUpgradeCosts();
+            document.getElementById('shop-gold').textContent = metaState.gold;
+            document.getElementById('hud-gold').textContent = metaState.gold;
+
+            const baseDmg = 8 + metaState.dmgLvl * 4;
+            document.getElementById('upg-dmg-lvl').textContent = `Lv.${metaState.dmgLvl}`;
+            document.getElementById('upg-dmg-val').textContent = `${baseDmg} ➔ ${baseDmg + 4}`;
+            document.getElementById('upg-dmg-cost').textContent = costs.dmg;
+
+            const baseRate = 2.2 + metaState.rateLvl * 0.3;
+            document.getElementById('upg-rate-lvl').textContent = `Lv.${metaState.rateLvl}`;
+            document.getElementById('upg-rate-val').textContent = `${baseRate.toFixed(1)}/s ➔ ${(baseRate + 0.3).toFixed(1)}/s`;
+            document.getElementById('upg-rate-cost').textContent = costs.rate;
+
+            document.getElementById('upg-multi-lvl').textContent = `Lv.${metaState.multiLvl}`;
+            document.getElementById('upg-multi-val').textContent = `${metaState.multiLvl}발 ➔ ${metaState.multiLvl + 1}발`;
+            document.getElementById('upg-multi-cost').textContent = costs.multi;
+
+            document.getElementById('upg-ally-lvl').textContent = `Lv.${metaState.allyLvl}`;
+            document.getElementById('upg-ally-val').textContent = `${metaState.allyLvl}명 ➔ ${metaState.allyLvl + 1}명`;
+            document.getElementById('upg-ally-cost').textContent = costs.ally;
+        }
+
+        document.getElementById('upg-dmg').addEventListener('click', () => {
+            sfx.init();
+            const cost = getUpgradeCosts().dmg;
+            if (metaState.gold >= cost) {
+                metaState.gold -= cost;
+                metaState.dmgLvl++;
+                saveMeta();
+                sfx.powerup(true);
+                refreshShopUI();
+            }
+        });
+
+        document.getElementById('upg-rate').addEventListener('click', () => {
+            sfx.init();
+            const cost = getUpgradeCosts().rate;
+            if (metaState.gold >= cost) {
+                metaState.gold -= cost;
+                metaState.rateLvl++;
+                saveMeta();
+                sfx.powerup(true);
+                refreshShopUI();
+            }
+        });
+
+        document.getElementById('upg-multi').addEventListener('click', () => {
+            sfx.init();
+            const cost = getUpgradeCosts().multi;
+            if (metaState.gold >= cost && metaState.multiLvl < 6) {
+                metaState.gold -= cost;
+                metaState.multiLvl++;
+                saveMeta();
+                sfx.powerup(true);
+                refreshShopUI();
+            }
+        });
+
+        document.getElementById('upg-ally').addEventListener('click', () => {
+            sfx.init();
+            const cost = getUpgradeCosts().ally;
+            if (metaState.gold >= cost && metaState.allyLvl < 4) {
+                metaState.gold -= cost;
+                metaState.allyLvl++;
+                saveMeta();
+                sfx.powerup(true);
+                refreshShopUI();
+            }
+        });
+
+        document.getElementById('btn-sound').addEventListener('click', (e) => {
+            sfx.init();
+            const muted = sfx.toggleMute();
+            e.currentTarget.textContent = muted ? '🔇' : '🔊';
+        });
+
+        function clearAllEntities() {
+            arrows.forEach(a => scene.remove(a.mesh));
+            arrows.length = 0;
+
+            gates.forEach(g => scene.remove(g.group));
+            gates.length = 0;
+
+            crates.forEach(c => {
+                scene.remove(c.group);
+                c.domEl.remove();
+            });
+            crates.length = 0;
+
+            enemies.forEach(e => {
+                scene.remove(e.mesh);
+                e.domEl.remove();
+            });
+            enemies.length = 0;
+        }
+
+        function startNewRun() {
+            sfx.init();
+            clearAllEntities();
+
+            currentWave = 1;
+            waveProgress = 0;
+            spawnPhase = 0;
+            spawnCycleTimer = 0.6;
+            targetX = 0;
+            playerRoot.position.x = 0;
+
+            playerStats.damage = 8 + metaState.dmgLvl * 4;
+            playerStats.fireRate = 2.2 + metaState.rateLvl * 0.3;
+            playerStats.multiShot = metaState.multiLvl;
+            playerStats.allies = metaState.allyLvl;
+            playerStats.dragons = 0;
+            playerStats.arrowTier = 0;
+
+            document.getElementById('hud-boss-badge').classList.add('hidden');
+            syncCompanionVisuals();
+            updateHUD();
+
+            document.getElementById('modal-screen').classList.add('hidden');
+            gameState = 'PLAYING';
+            showBanner('WAVE 1 START!', '게이트와 상자를 쏴서 화살을 강화하세요!', 1800);
+        }
+
+        function triggerGameOver() {
+            gameState = 'GAMEOVER';
+            sfx.powerup(false);
+            document.getElementById('modal-title').textContent = `WAVE ${currentWave} 돌파 실패!`;
+            document.getElementById('modal-subtitle').textContent = '획득한 골드로 영구 능력치를 강화하고 다시 도전하세요!';
+            document.getElementById('btn-start-game').textContent = '🔄 다시 출격하기 (RETRY)';
+            refreshShopUI();
+            document.getElementById('modal-screen').classList.remove('hidden');
+        }
+
+        document.getElementById('btn-start-game').addEventListener('click', startNewRun);
+
+        /********************************************************************
+         * 12. MAIN GAME LOOP & 2D/3D PROJECTION UPDATES
+         ********************************************************************/
+        const clock = new THREE.Clock();
+
+        function projectToScreen(worldVec, domEl) {
+            const v = worldVec.clone();
+            v.project(camera);
+            if (v.z > 1) {
+                domEl.style.display = 'none';
+                return;
+            }
+            domEl.style.display = 'flex';
+            const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-(v.y * 0.5) + 0.5) * window.innerHeight;
+            domEl.style.left = `${x}px`;
+            domEl.style.top = `${y}px`;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.05);
+            const elapsed = clock.getElapsedTime();
+
+            // 1. Move Scenery Forward Illusion
+            const forwardSpeed = gameState === 'PLAYING' ? 11.5 : 3.5;
+            sceneryItems.forEach((item) => {
+                item.mesh.position.z += forwardSpeed * item.speedMult * dt;
+                if (item.mesh.position.z > 16) {
+                    item.mesh.position.z -= 180;
+                }
+            });
+
+            // 2. Character Running Bob & Companion Animations
+            const runCycle = elapsed * (gameState === 'PLAYING' ? 14 : 5);
+            mainArcherMesh.position.y = Math.abs(Math.sin(runCycle)) * 0.14;
+            mainArcherMesh.userData.leftLeg.rotation.x = Math.sin(runCycle) * 0.6;
+            mainArcherMesh.userData.rightLeg.rotation.x = -Math.sin(runCycle) * 0.6;
+            mainArcherMesh.userData.cape.rotation.x = 0.25 + Math.sin(runCycle * 1.5) * 0.12;
+
+            allyMeshes.forEach((ally, idx) => {
+                const c = runCycle + idx;
+                ally.position.y = Math.abs(Math.sin(c)) * 0.11;
+                ally.userData.leftLeg.rotation.x = Math.sin(c) * 0.6;
+                ally.userData.rightLeg.rotation.x = -Math.sin(c) * 0.6;
+            });
+
+            dragonMeshes.forEach((drg, idx) => {
+                const side = idx === 0 ? -1.4 : 1.4;
+                drg.position.set(side, 2.15 + Math.sin(elapsed * 5 + idx) * 0.22, -0.2);
+                drg.userData.leftWing.rotation.z = Math.sin(elapsed * 18) * 0.55;
+                drg.userData.rightWing.rotation.z = -Math.sin(elapsed * 18) * 0.55;
+            });
+
+            // Update Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.life -= dt;
+                p.mesh.position.addScaledVector(p.vel, dt);
+                p.vel.y -= 18 * dt;
+                p.mesh.scale.setScalar(Math.max(0.01, p.life * 2));
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    particles.splice(i, 1);
+                }
+            }
+
+            if (gameState !== 'PLAYING') {
+                renderer.render(scene, camera);
+                return;
+            }
+
+            // 3. Player Horizontal Control
+            if (keysPressed.left) targetX -= 9.5 * dt;
+            if (keysPressed.right) targetX += 9.5 * dt;
+            targetX = Math.max(-PLAY_LIMIT_X, Math.min(PLAY_LIMIT_X, targetX));
+
+            const prevX = playerRoot.position.x;
+            playerRoot.position.x += (targetX - playerRoot.position.x) * Math.min(1, dt * 14);
+            const tilt = (playerRoot.position.x - prevX) * -1.8;
+            playerRoot.rotation.z = THREE.MathUtils.lerp(playerRoot.rotation.z, tilt, 0.2);
+
+            // Slight Camera Follow on X
+            camera.position.x = THREE.MathUtils.lerp(camera.position.x, playerRoot.position.x * 0.35, 0.1);
+
+            // 4. Auto-Shooting Timers
+            shootTimer += dt;
+            const fireInterval = 1 / playerStats.fireRate;
+            if (shootTimer >= fireInterval) {
+                shootTimer = 0;
+                fireArrowVolley();
+            }
+
+            if (playerStats.dragons > 0) {
+                dragonShootTimer += dt;
+                if (dragonShootTimer >= 0.85) {
+                    dragonShootTimer = 0;
+                    fireDragonFireballs();
+                }
+            }
+
+            // 5. Wave Spawn Sequencer
+            spawnCycleTimer -= dt;
+            if (spawnCycleTimer <= 0) {
+                if (spawnPhase === 0) {
+                    spawnChoiceGatePair();
+                    spawnCycleTimer = 2.7;
+                } else if (spawnPhase === 1 || spawnPhase === 2) {
+                    spawnEnemyRow(false);
+                    spawnCycleTimer = 2.5;
+                } else if (spawnPhase === 3) {
+                    spawnTreasureCrates();
+                    spawnCycleTimer = 2.8;
+                } else if (spawnPhase === 4 || spawnPhase === 5) {
+                    spawnEnemyRow(false);
+                    spawnCycleTimer = 2.5;
+                } else if (spawnPhase === 6) {
+                    spawnChoiceGatePair();
+                    spawnCycleTimer = 2.8;
+                } else if (spawnPhase === 7) {
+                    spawnEnemyRow(true); // BOSS WAVE
+                    spawnCycleTimer = 999; // Wait until boss is defeated
+                }
+                spawnPhase++;
+                waveProgress = Math.min(95, (spawnPhase / 8) * 100);
+                updateHUD();
+            }
+
+            // 6. Update Projectiles & Check Gate / Crate / Enemy Hits
+            for (let i = arrows.length - 1; i >= 0; i--) {
+                const a = arrows[i];
+                a.mesh.position.x += a.velX * dt;
+                a.mesh.position.z += a.velZ * dt;
+
+                if (a.mesh.position.z < -68) {
+                    scene.remove(a.mesh);
+                    arrows.splice(i, 1);
+                    continue;
+                }
+
+                let consumed = false;
+
+                // Hit Choice Gates (Increments their value!)
+                for (let gIdx = 0; gIdx < gates.length; gIdx++) {
+                    const g = gates[gIdx];
+                    if (
+                        Math.abs(a.mesh.position.z - g.group.position.z) < 0.85 &&
+                        Math.abs(a.mesh.position.x - g.group.position.x) < 1.95
+                    ) {
+                        g.val += g.step;
+                        refreshGateVisual(g);
+                        g.group.scale.set(1.06, 1.06, 1.06);
+                        sfx.gateTick();
+                        spawnParticleBurst(a.mesh.position, g.val >= 0 ? 0x38bdf8 : 0xf43f5e, 3);
+                        consumed = true;
+                        break;
+                    }
+                }
+                if (consumed) {
+                    scene.remove(a.mesh);
+                    arrows.splice(i, 1);
+                    continue;
+                }
+
+                // Hit Treasure Crates
+                for (let cIdx = crates.length - 1; cIdx >= 0; cIdx--) {
+                    const c = crates[cIdx];
+                    if (
+                        Math.abs(a.mesh.position.z - c.group.position.z) < 1.15 &&
+                        Math.abs(a.mesh.position.x - c.group.position.x) < 1.25
+                    ) {
+                        c.hp -= 1;
+                        c.hpSpan.textContent = Math.max(0, c.hp);
+                        c.group.scale.set(1.12, 0.9, 1.12);
+                        sfx.hit();
+                        spawnParticleBurst(a.mesh.position, 0xfacc15, 4);
+
+                        if (c.hp <= 0) {
+                            applyCrateReward(c);
+                            spawnParticleBurst(c.group.position, 0xfde047, 14);
+                            scene.remove(c.group);
+                            c.domEl.remove();
+                            crates.splice(cIdx, 1);
+                        }
+                        consumed = true;
+                        break;
+                    }
+                }
+                if (consumed) {
+                    scene.remove(a.mesh);
+                    arrows.splice(i, 1);
+                    continue;
+                }
+
+                // Hit Monsters
+                for (let eIdx = enemies.length - 1; eIdx >= 0; eIdx--) {
+                    const en = enemies[eIdx];
+                    const dx = a.mesh.position.x - en.mesh.position.x;
+                    const dz = a.mesh.position.z - en.mesh.position.z;
+                    if (Math.hypot(dx, dz) < en.radius + 0.35) {
+                        en.hp -= a.dmg;
+                        en.flashTimer = 0.08;
+                        en.mesh.userData.hitMesh.material.color.setHex(0xffffff);
+                        en.mesh.position.z -= 0.18; // Slight knockback
+
+                        sfx.hit();
+                        spawnFloatingText(
+                            en.mesh.position.clone().add(new THREE.Vector3(0, en.type === 'boss' ? 3.5 : 1.8, 0)),
+                            `-${a.dmg}`,
+                            a.isFireball ? 'text-orange-400 text-base' : 'text-amber-200 text-sm'
+                        );
+
+                        if (en.hp <= 0) {
+                            const goldReward = en.type === 'boss' ? 80 + currentWave * 25 : 6 + currentWave * 2;
+                            metaState.gold += goldReward;
+                            saveMeta();
+                            updateHUD();
+
+                            spawnParticleBurst(
+                                en.mesh.position.clone().add(new THREE.Vector3(0, 1, 0)),
+                                en.type === 'boss' ? 0xef4444 : 0xa855f7,
+                                en.type === 'boss' ? 26 : 10
+                            );
+                            spawnFloatingText(
+                                en.mesh.position.clone().add(new THREE.Vector3(0, 1.4, 0)),
+                                `+${goldReward} 🪙`,
+                                'text-yellow-300 text-base'
+                            );
+
+                            const wasBoss = en.type === 'boss';
+                            scene.remove(en.mesh);
+                            en.domEl.remove();
+                            enemies.splice(eIdx, 1);
+
+                            if (wasBoss) {
+                                currentWave++;
+                                waveProgress = 0;
+                                spawnPhase = 0;
+                                spawnCycleTimer = 2.0;
+                                document.getElementById('hud-boss-badge').classList.add('hidden');
+                                sfx.powerup(true);
+                                showBanner(`🎉 WAVE ${currentWave - 1} CLEAR!`, `보스 처치 완료! WAVE ${currentWave} 시작!`, 2400);
+                                updateHUD();
+                            }
+                        } else {
+                            en.hpTxt.textContent = en.hp;
+                            en.hpBar.style.width = `${Math.max(0, (en.hp / en.maxHp) * 100)}%`;
+                        }
+
+                        consumed = true;
+                        break;
+                    }
+                }
+
+                if (consumed) {
+                    scene.remove(a.mesh);
+                    arrows.splice(i, 1);
+                }
+            }
+
+            // 7. Advance Choice Gates Toward Player
+            for (let i = gates.length - 1; i >= 0; i--) {
+                const g = gates[i];
+                g.group.position.z += 10.5 * dt;
+                g.group.scale.lerp(new THREE.Vector3(1, 1, 1), 0.2);
+
+                // Player passes through gate
+                if (
+                    Math.abs(g.group.position.z - playerRoot.position.z) < 0.75 &&
+                    Math.abs(g.group.position.x - playerRoot.position.x) < 2.25
+                ) {
+                    applyGateEffect(g);
+                    // Remove both gates in the same row so player only picks one
+                    const rowZ = g.group.position.z;
+                    for (let j = gates.length - 1; j >= 0; j--) {
+                        if (Math.abs(gates[j].group.position.z - rowZ) < 1.5) {
+                            scene.remove(gates[j].group);
+                            gates.splice(j, 1);
+                        }
+                    }
+                    break;
+                } else if (g.group.position.z > 10) {
+                    scene.remove(g.group);
+                    gates.splice(i, 1);
+                }
+            }
+
+            // 8. Advance Treasure Crates Toward Player
+            for (let i = crates.length - 1; i >= 0; i--) {
+                const c = crates[i];
+                c.group.position.z += 10.5 * dt;
+                c.group.scale.lerp(new THREE.Vector3(1, 1, 1), 0.2);
+
+                projectToScreen(c.group.position.clone().add(new THREE.Vector3(0, 2.2, 0)), c.domEl);
+
+                if (c.group.position.z > 7.5) {
+                    scene.remove(c.group);
+                    c.domEl.remove();
+                    crates.splice(i, 1);
+                }
+            }
+
+            // 9. Advance Enemies Toward Player
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const en = enemies[i];
+                const spd = en.type === 'boss' ? 5.8 : 7.8;
+                en.mesh.position.z += spd * dt;
+                en.mesh.position.y = Math.abs(Math.sin(elapsed * 8 + i)) * 0.18;
+
+                if (en.flashTimer > 0) {
+                    en.flashTimer -= dt;
+                    if (en.flashTimer <= 0) {
+                        en.mesh.userData.hitMesh.material.color.setHex(en.mesh.userData.origColor);
+                    }
+                }
+
+                const headOffset = en.type === 'boss' ? 4.3 : 2.1;
+                projectToScreen(en.mesh.position.clone().add(new THREE.Vector3(0, headOffset, 0)), en.domEl);
+
+                // Check if monster breached player defense line
+                if (en.mesh.position.z >= playerRoot.position.z - 0.6) {
+                    triggerGameOver();
+                    break;
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Responsive Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.onload = () => {
+            refreshShopUI();
+            updateHUD();
+            animate();
+        };
+    </script>
+</body>
+</html>
