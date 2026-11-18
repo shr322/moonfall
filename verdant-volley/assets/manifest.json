@@ -1,0 +1,14 @@
+{
+  "retrieved": "2026-11-17",
+  "nature_source": "https://kenney.nl/assets/nature-kit",
+  "nature_license": "CC0-1.0",
+  "nature_archive_sha256": "fa7974a0d342bfe63c38664ba9f8ec1a4aab8ea25f099bdc56870e33588c4d9d",
+  "three_version": "0.128.0",
+  "three_license": "MIT",
+  "files": {
+    "kenney-nature.js": "771bfcbb5bb0e8217ab9e0f4385425e359f6307b4c358ee6ca6fd676ac8a710a",
+    "KENNEY-LICENSE.txt": "cb96b75e3560ac78d7a53ce6f083f4cdb5c53faea6141b62d63458dcfe1e4b9d",
+    "vendor/three.min.js": "9274bbcec8d96168626c732b5d31c775aa8cfb7eaa0599bec0c175908a2c1ce2",
+    "vendor/THREE-LICENSE.txt": "7dddf7c5b8fd10ee654db8857d75d104b5557889aa5a91fc4ca545ea7c07062f"
+  }
+}
